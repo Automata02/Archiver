@@ -57,6 +57,7 @@ struct ContentView: View {
                     logicHandler.startArchiving()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(logicHandler.inPath.isEmpty ? true : false)
             }
             .padding(.top, 10)
         }
