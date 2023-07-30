@@ -19,7 +19,7 @@ struct ContentView: View {
             ZStack {
                 List {
                     if logicHandler.inPath.isEmpty {
-                        Text("No Folders Selected.")
+                        Text(logicHandler.isArchivingCompleted ? "Archiving has finished." : "No Folders Selected.")
                             .foregroundColor(Color(.disabledControlTextColor))
                     } else {
                         Text("Selected folder count: \(logicHandler.inPath.count)")
@@ -38,9 +38,9 @@ struct ContentView: View {
                         .onChange(of: logicHandler.isArchivingCompleted) { isCompleted in
                             if isCompleted {
                                 isShowingProgressView = false
-                                logicHandler.isArchivingCompleted = false
+//                                logicHandler.isArchivingCompleted = false
                             }
-                    }
+                        }
                     Text(logicHandler.archivingStatus)
                         .padding(.top, 5)
                 }

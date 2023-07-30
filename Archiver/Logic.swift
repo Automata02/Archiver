@@ -34,6 +34,7 @@ class LogicHandler: ObservableObject {
             await archiveFolders()
             DispatchQueue.main.async {
                 self.isArchivingCompleted = true
+                self.inPath.removeAll(keepingCapacity: true)
             }
         }
     }
