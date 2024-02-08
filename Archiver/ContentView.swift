@@ -29,8 +29,9 @@ struct ContentView: View {
                         }
                     }
                 }
-                .opacity(isShowingProgressView ? 0.3 : 1)
                 .cornerRadius(5)
+                .opacity(isShowingProgressView ? 0.3 : 1)
+                .blur(radius: isShowingProgressView ? 2 : 0)
                 VStack {
                     ProgressView(value: logicHandler.progress)
                         .zIndex(1)
@@ -38,14 +39,14 @@ struct ContentView: View {
                         .onChange(of: logicHandler.isArchivingCompleted) { isCompleted in
                             if isCompleted {
                                 isShowingProgressView = false
-//                                logicHandler.isArchivingCompleted = false
+                                logicHandler.isArchivingCompleted = false
                             }
                         }
                     Text(logicHandler.archivingStatus)
                         .padding(.top, 5)
                 }
                 .padding()
-                .background(.blue)
+                .background(.regularMaterial)
                 .opacity(isShowingProgressView ? 1 : 0)
                 .cornerRadius(5)
             }

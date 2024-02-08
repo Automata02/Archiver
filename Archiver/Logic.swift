@@ -29,12 +29,18 @@ class LogicHandler: ObservableObject {
         self.archivingStatus = archivingStatus
     }
     
+    func resetSteps() {
+        step = 0
+        progress = 0
+    }
+    
     func startArchiving() {
         Task {
             await archiveFolders()
             DispatchQueue.main.async {
                 self.isArchivingCompleted = true
                 self.inPath.removeAll(keepingCapacity: true)
+                self.resetSteps()
             }
         }
     }
