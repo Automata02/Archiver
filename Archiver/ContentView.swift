@@ -32,13 +32,12 @@ struct ContentView: View {
                 .opacity(isShowingProgressView ? 0.3 : 1)
                 .cornerRadius(5)
                 VStack {
-                    ProgressView(value: logicHandler.progress)
+                    ProgressView()
                         .zIndex(1)
                         .progressViewStyle(.circular)
                         .onChange(of: logicHandler.isArchivingCompleted) { isCompleted in
                             if isCompleted {
                                 isShowingProgressView = false
-//                                logicHandler.isArchivingCompleted = false
                             }
                         }
                     Text(logicHandler.archivingStatus)

@@ -8,6 +8,7 @@
 import Foundation
 import AppKit
 
+@MainActor
 class LogicHandler: ObservableObject {
     
     @Published var inPath: [String] = []
@@ -34,6 +35,7 @@ class LogicHandler: ObservableObject {
             await archiveFolders()
             DispatchQueue.main.async {
                 self.isArchivingCompleted = true
+                self.archivingStatus = "Archiving completed successfully!"
                 self.inPath.removeAll(keepingCapacity: true)
             }
         }
@@ -41,8 +43,9 @@ class LogicHandler: ObservableObject {
     
     func archiveFolders() async {
         for (index, path) in inPath.enumerated() {
+            let folderName = URL(fileURLWithPath: path).lastPathComponent
             DispatchQueue.main.async {
-                self.archivingStatus = "Compressing folder \(index + 1) of \(self.inPath.count).😤"
+                self.archivingStatus = "Compressing folder \(index + 1) of \(self.inPath.count): \(folderName) 😤"
             }
             await archiveImages(in: path)
         }
@@ -50,7 +53,8 @@ class LogicHandler: ObservableObject {
     
     func archiveImages(in folderPath: String) async {
         let fileManager = FileManager.default
-        let imageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "tiff"]
+        let imageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp"]
+        let folderURL = URL(fileURLWithPath: folderPath)
         
         do {
             let contents = try fileManager.contentsOfDirectory(atPath: folderPath)
@@ -59,51 +63,81 @@ class LogicHandler: ObservableObject {
                 return fileExtension.map { imageExtensions.contains($0) } ?? false
             }
             
-            guard !imageFiles.isEmpty else {
+            let sortedImageFiles = imageFiles.sorted()
+            
+            guard !sortedImageFiles.isEmpty else {
                 print("No image files found in the folder.")
                 return
             }
             
-            let folderURL = URL(fileURLWithPath: folderPath)
-            let archiveName = folderURL.lastPathComponent + ".cbz"
-            let archivePath = folderURL.deletingLastPathComponent().appendingPathComponent(archiveName).path
+            let tempDirectoryURL = folderURL.appendingPathComponent("temp_conversion", isDirectory: true)
             
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["zip", "-j", archivePath] + imageFiles.map { folderPath + "/" + $0 }
+            try? fileManager.createDirectory(at: tempDirectoryURL, withIntermediateDirectories: true)
             
-            try process.run()
-            process.waitUntilExit()
-            
-            await updateProgressSmoothly(increment: step, duration: 1.0)
-            
-            if process.terminationStatus == 0 {
-                print("Successfully created the archive at: \(archivePath)")
-            } else {
-                print("An error occurred while creating the archive.")
+            return await withCheckedContinuation { continuation in
+                var convertedFilesMap: [(original: String, converted: URL)] = []
+                let group = DispatchGroup()
+                let queue = DispatchQueue(label: "com.imageconversion.queue", attributes: .concurrent)
+                
+                for (index, imageFile) in sortedImageFiles.enumerated() {
+                    group.enter()
+                    queue.async {
+                        let imageURL = folderURL.appendingPathComponent(imageFile)
+                        
+                        let paddedIndex = String(format: "%04d", index)
+                        let convertedImageName = "\(paddedIndex)_\(imageFile).jpg"
+                        let convertedImageURL = tempDirectoryURL.appendingPathComponent(convertedImageName)
+                        
+                        if let image = NSImage(contentsOf: imageURL) {
+                            if let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                                let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
+                                if let jpegData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.9]) {
+                                    try? jpegData.write(to: convertedImageURL)
+                                    
+                                    DispatchQueue.main.async {
+                                        convertedFilesMap.append((original: imageFile, converted: convertedImageURL))
+                                    }
+                                }
+                            }
+                        }
+                        
+                        group.leave()
+                    }
+                }
+                
+                group.notify(queue: .main) {
+                    let sortedConvertedFiles = convertedFilesMap.sorted { $0.0 < $1.0 }.map { $0.1.path }
+                    let archiveName = folderURL.lastPathComponent + ".cbz"
+                    let archivePath = folderURL.deletingLastPathComponent().appendingPathComponent(archiveName).path
+                    
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                    process.arguments = ["zip", "-j", archivePath] + sortedConvertedFiles
+                    
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
+                        
+                        try? fileManager.removeItem(at: tempDirectoryURL)
+                        
+                        if process.terminationStatus == 0 {
+                            print("Successfully created the archive at: \(archivePath)")
+                        } else {
+                            print("An error occurred while creating the archive.")
+                        }
+                        
+                        continuation.resume()
+                    } catch {
+                        print("An error occurred: \(error.localizedDescription)")
+                        continuation.resume()
+                    }
+                }
             }
         } catch {
             print("An error occurred: \(error.localizedDescription)")
         }
     }
-    
-    func updateProgressSmoothly(increment: Double, duration: TimeInterval) async {
-        let numberOfUpdates = 50
-        let timeBetweenUpdates = duration / Double(numberOfUpdates)
-        let progressIncrement = increment / Double(numberOfUpdates)
-            
-        for _ in 0..<numberOfUpdates {
-            do {
-                try await Task.sleep(nanoseconds: UInt64(timeBetweenUpdates * 1_000_000_000))
-            } catch {
-                print("Something went wrong with the timer.")
-            }
-            DispatchQueue.main.async {
-                    self.progress += progressIncrement
-            }
-        }
-    }
-    
+
     func selectFolders(completion: @escaping ([URL]) -> Void) {
         DispatchQueue.main.async {
             let openPanel = NSOpenPanel()
@@ -134,7 +168,6 @@ class LogicHandler: ObservableObject {
             } else {
                 print("No folders were selected.")
             }
-            step = 1.0 / Double(inPath.count)
         }
     }
 }
